@@ -1,0 +1,71 @@
+{
+  "telegramBot": {
+    "botToken": "YOUR_TELEGRAM_BOT_TOKEN_HERE"
+  },
+
+  "botName": "[!]𝐍𝐈𝐉𝐇𝐔𝐌-𝐂𝐇𝐀𝐓-𝐁𝐎𝐓",
+  
+  "prefix": {
+    "publicPrefix": "!",
+    "adminPrefix": ".",
+    "allowAdminUsePublicPrefix": true
+  },
+
+  "timeZone": "Asia/Dhaka",
+  "language": "en",
+
+  "adminOnly": {
+    "enable": false,
+    "ignoreCommand": ["help", "info"]
+  },
+
+  "adminBot": [
+    "61593771713736",
+    "61591371186179",
+    "61592186757564",
+    "61593360671710"
+  ],
+
+  "security": {
+    "enableOwnerLock": true,
+    "ownerUID": "61593771713736",
+    "ownerName": "𝐒𝐈𝐘𝐀𝐌-𝐇𝐀𝐒𝐀𝐍"
+  },
+
+  "reactUnsend": {
+    "enable": true,
+    "onlyAdmin": true,
+    "emojis": ["😹", "😾", "💋", "🫡"]
+  },
+
+  "whiteListMode": {
+    "enable": true,
+    "whiteListIds": [
+      "61593771713736",
+      "61591371186179",
+      "61592186757564",
+      "61593360671710"
+    ]
+  },
+
+  "whiteListModeThread": {
+    "enable": false,
+    "whiteListThreadIds": []
+  },
+
+  "dashBoard": {
+    "enable": true,
+    "port": 3001
+  },
+
+  "autoRestart": {
+    "enable": true,
+    "time": 3600000
+  },
+
+  "hideNotiMessage": {
+    "commandNotFound": false,
+    "adminOnly": false,
+    "userBanned": false
+  }
+}
