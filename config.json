@@ -30,13 +30,13 @@
   },
 
   "reactUnsend": {
-    "enable": true,
+    "enable": false,
     "onlyAdmin": true,
     "emojis": ["😹", "😾", "💋", "🫡"]
   },
 
   "whiteListMode": {
-    "enable": true,
+    "enable": false,
     "whiteListIds": [
       "8442705758"
     ]
