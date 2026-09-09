@@ -5,24 +5,19 @@ const path = require('path');
 const express = require('express');
 const chokidar = require('chokidar');
 
-// Load Config File Dynamically
 const configPath = path.join(__dirname, 'config.json');
 let config = fs.existsSync(configPath) ? fs.readJsonSync(configPath) : {};
 
-// Express App setup for 24/7 keep-alive
 const app = express();
 const PORT = process.env.PORT || config.dashBoard?.port || 3000;
 app.get('/', (req, res) => res.send(`👑 ${config.botName || 'Bot'} Is Active 24/7!`));
 app.listen(PORT, () => console.log(`[SERVER] Keep-alive server running on port ${PORT}`));
 
-// Bot Initialization
 const token = process.env.BOT_TOKEN || config.telegramBot?.botToken;
 const bot = new TelegramBot(token, { polling: true });
 
-// Global Helper Text Styler
 global.styleText = (text) => `<b>${text}</b>`;
 
-// Dynamic Config Fetcher Function
 global.getBotConfig = () => {
     if (fs.existsSync(configPath)) {
         try { config = fs.readJsonSync(configPath); } catch (e) {}
@@ -34,15 +29,17 @@ global.getBotConfig = () => {
         adminBot: (config.adminBot || []).map(id => String(id)),
         userPrefix: config.prefix?.publicPrefix || "!",
         adminPrefix: config.prefix?.adminPrefix || ".",
-        allowAdminUsePublicPrefix: config.prefix?.allowAdminUsePublicPrefix ?? true
+        allowAdminUsePublicPrefix: config.prefix?.allowAdminUsePublicPrefix ?? true,
+        whiteListMode: config.whiteListMode || { enable: false, whiteListIds: [] },
+        adminOnly: config.adminOnly || { enable: false, ignoreCommand: [] },
+        reactUnsend: config.reactUnsend || { enable: false, onlyAdmin: true, emojis: [] },
+        hideNotiMessage: config.hideNotiMessage || { commandNotFound: false, adminOnly: false, userBanned: false }
     };
 };
 
-// Collections
 bot.commands = new Map();
 bot.events = [];
 
-// Dynamic Command Loader
 function loadCommands() {
     const commandPath = path.join(__dirname, 'command');
     if (!fs.existsSync(commandPath)) fs.mkdirSync(commandPath, { recursive: true });
@@ -65,7 +62,6 @@ function loadCommands() {
     }
 }
 
-// Dynamic Event Loader
 function loadEvents() {
     const eventPath = path.join(__dirname, 'event');
     if (!fs.existsSync(eventPath)) fs.mkdirSync(eventPath, { recursive: true });
@@ -85,18 +81,34 @@ function loadEvents() {
     }
 }
 
-// Initial Load
 loadCommands();
 loadEvents();
 
-// Auto-Watch for File Changes
 chokidar.watch([path.join(__dirname, 'command'), path.join(__dirname, 'event')]).on('change', (filePath) => {
     console.log(`[FILE CHANGED] Reloading modules: ${filePath}`);
     loadCommands();
     loadEvents();
 });
 
-// Incoming Message Handler
+bot.on('message_reaction', async (event) => {
+    const botConf = global.getBotConfig();
+    if (!botConf.reactUnsend.enable) return;
+
+    const userId = String(event.user.id);
+    const isAdmin = botConf.adminBot.includes(userId) || userId === botConf.ownerUID;
+
+    if (botConf.reactUnsend.onlyAdmin && !isAdmin) return;
+
+    const newEmoji = event.new_reaction?.[0]?.emoji;
+    if (newEmoji && botConf.reactUnsend.emojis.includes(newEmoji)) {
+        try {
+            await bot.deleteMessage(event.chat.id, event.message_id);
+        } catch (err) {
+            console.error(`[UNSEND ERROR]:`, err.message);
+        }
+    }
+});
+
 bot.on('message', async (msg) => {
     if (!msg.text) return;
 
@@ -105,7 +117,13 @@ bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const userId = String(msg.from.id);
 
-    // ১. "prefix" দিলে কনফিগ ফাইল থেকে সরাসরি দেখাবে
+    const isAdmin = botConf.adminBot.includes(userId) || userId === botConf.ownerUID;
+
+    if (botConf.whiteListMode.enable && !isAdmin) {
+        const isWhitelisted = botConf.whiteListMode.whiteListIds.map(String).includes(userId);
+        if (!isWhitelisted) return;
+    }
+
     if (text.toLowerCase() === "prefix") {
         const prefixInfoMsg = `${global.styleText('⚙️ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐏𝐑𝐄𝐅𝐈𝐗 𝐈𝐍𝐅𝐎')}\n\n` +
             `${global.styleText(`👤 𝐔𝐒𝐄𝐑 𝐏𝐑𝐄𝐅𝐈𝐗 : [ ${botConf.userPrefix} ]`)}\n` +
@@ -116,12 +134,7 @@ bot.on('message', async (msg) => {
         return bot.sendMessage(chatId, prefixInfoMsg, { parse_mode: 'HTML' });
     }
 
-    // এডমিন ও অনার রোলের তথ্য কনফিগ থেকে চেক
-    const isAdmin = botConf.adminBot.includes(userId) || userId === botConf.ownerUID;
-    
-    // প্রিফিক্স ডিটেকশন (এডমিন হলে দুটোই কাজ করবে, ইউজার হলে শুধু পাবলিক প্রিফিক্স)
     let activePrefix = null;
-
     if (isAdmin) {
         if (text.startsWith(botConf.adminPrefix)) {
             activePrefix = botConf.adminPrefix;
@@ -134,7 +147,6 @@ bot.on('message', async (msg) => {
         }
     }
 
-    // ২. onChat এবং Non-prefix Events
     for (const [, cmd] of bot.commands) {
         if (typeof cmd.onChat === 'function') {
             try {
@@ -156,21 +168,29 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    // ৩. শুধু প্রিফিক্স টাইপ করলে
     const rawInput = text.slice(activePrefix.length).trim();
     if (rawInput === "") {
         const noCmdMsg = `${global.styleText(`⚠️ 𝐍𝐎 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐏𝐑𝐎𝐕𝐈𝐃𝐄𝐃!`)}\n\n` +
-            `${global.styleText(`𝐔𝐒𝐄 ${activePrefix}help 𝐓𝐎 𝐒𝐄𝐄 𝐀𝐋🇱 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒.`)}\n\n` +
+            `${global.styleText(`𝐔𝐒𝐄 ${activePrefix}help 𝐓𝐎 𝐒𝐄𝐄 𝐀🇱🇱 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒.`)}\n\n` +
             `${global.styleText(`👑 ${botConf.botName}`)}\n` +
             `${global.styleText(`👑 𝗕𝗢𝗧 𝗢𝗪𝗡𝗘𝗥 ➜ ${botConf.ownerName}`)}`;
 
         return bot.sendMessage(chatId, noCmdMsg, { parse_mode: 'HTML' });
     }
 
-    // ৪. কমান্ড প্রসেস করা
     const args = rawInput.split(/ +/);
     const commandName = args.shift().toLowerCase();
-    
+
+    if (botConf.adminOnly.enable && !isAdmin) {
+        const isIgnored = (botConf.adminOnly.ignoreCommand || []).includes(commandName);
+        if (!isIgnored) {
+            if (!botConf.hideNotiMessage.adminOnly) {
+                bot.sendMessage(chatId, global.styleText(`⚠️ 𝐓𝐡𝐢𝐬 𝐛𝐨𝐭 𝐢𝐬 𝐜𝐮𝐫𝐫𝐞𝐧𝐭𝐥𝐲 𝐢𝐧 𝐀𝐝𝐦𝐢𝐧-𝐎𝐧𝐥𝐲 𝐦𝐨𝐝𝐞!`), { parse_mode: 'HTML' });
+            }
+            return;
+        }
+    }
+
     let cmd = bot.commands.get(commandName);
     if (!cmd) {
         for (const [, command] of bot.commands) {
@@ -194,17 +214,17 @@ bot.on('message', async (msg) => {
             bot.sendMessage(chatId, global.styleText(`⚠️ 𝐀𝐧 𝐞𝐫𝐫𝐨𝐫 𝐨𝐜𝐜𝐮𝐫𝐫𝐞𝐝 𝐰𝐡𝐢𝐥𝐞 𝐞𝐱𝐞𝐜𝐮𝐭𝐢𝐧𝐠 𝐭𝐡𝐢𝐬 𝐜𝐨𝐦𝐦𝐚𝐧𝐝!`), { parse_mode: 'HTML' });
         }
     } else {
-        // ৫. ভুল কমান্ড
-        const notFoundMsg = `${global.styleText(`❌ 𝐍𝐎𝐓 𝐀 𝐕𝐀🇱𝐈𝐃 𝐂𝐎𝐌𝐌𝐀𝐍𝐃!`)}\n\n` +
-            `${global.styleText(`𝐔𝐒𝐄 ${activePrefix}help 𝐓𝐎 𝐒𝐄𝐄 𝐀𝐋🇱 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒.`)}\n\n` +
-            `${global.styleText(`👑 ${botConf.botName}`)}\n` +
-            `${global.styleText(`👑 𝗕𝗢𝗧 𝗢𝗪𝗡𝗘𝗥 ➜ ${botConf.ownerName}`)}`;
+        if (!botConf.hideNotiMessage.commandNotFound) {
+            const notFoundMsg = `${global.styleText(`❌ 𝐍𝐎𝐓 𝐀 𝐕𝐀🇱𝐈𝐃 𝐂𝐎𝐌𝐌𝐀𝐍𝐃!`)}\n\n` +
+                `${global.styleText(`𝐔𝐒𝐄 ${activePrefix}help 𝐓𝐎 𝐒𝐄𝐄 𝐀🇱🇱 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒.`)}\n\n` +
+                `${global.styleText(`👑 ${botConf.botName}`)}\n` +
+                `${global.styleText(`👑 𝗕𝗢𝗧 𝗢𝗪𝗡𝗘𝗥 ➜ ${botConf.ownerName}`)}`;
 
-        bot.sendMessage(chatId, notFoundMsg, { parse_mode: 'HTML' });
+            bot.sendMessage(chatId, notFoundMsg, { parse_mode: 'HTML' });
+        }
     }
 });
 
-// Anti-Crash Protection
 process.on('unhandledRejection', (reason) => console.error(' [ANTI-CRASH] Unhandled Rejection:', reason));
 process.on('uncaughtException', (err) => console.error(' [ANTI-CRASH] Uncaught Exception:', err));
 
