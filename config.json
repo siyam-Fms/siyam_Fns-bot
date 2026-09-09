@@ -1,6 +1,6 @@
 {
   "telegramBot": {
-    "botToken": "YOUR_TELEGRAM_BOT_TOKEN_HERE"
+    "botToken": ""
   },
 
   "botName": "[!]𝐍𝐈𝐉𝐇𝐔𝐌-𝐂𝐇𝐀𝐓-𝐁𝐎𝐓",
@@ -20,15 +20,12 @@
   },
 
   "adminBot": [
-    "61593771713736",
-    "61591371186179",
-    "61592186757564",
-    "61593360671710"
+    "8442705758"
   ],
 
   "security": {
     "enableOwnerLock": true,
-    "ownerUID": "61593771713736",
+    "ownerUID": "8442705758",
     "ownerName": "𝐒𝐈𝐘𝐀𝐌-𝐇𝐀𝐒𝐀𝐍"
   },
 
@@ -41,10 +38,7 @@
   "whiteListMode": {
     "enable": true,
     "whiteListIds": [
-      "61593771713736",
-      "61591371186179",
-      "61592186757564",
-      "61593360671710"
+      "8442705758"
     ]
   },
 
