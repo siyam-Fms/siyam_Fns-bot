@@ -1,0 +1,19 @@
+{
+  "name": "nijhum-chat-bot",
+  "version": "1.0.0",
+  "description": "Advanced Telegram Bot Created By SIYAM-HASAN",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "axios": "^1.6.8",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "chokidar": "^3.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
