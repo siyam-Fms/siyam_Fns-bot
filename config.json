@@ -16,7 +16,7 @@
 
   "adminOnly": {
     "enable": false,
-    "ignoreCommand": ["help", "info"]
+    "ignoreCommand": ["help", "info", "prefix"]
   },
 
   "adminBot": [
