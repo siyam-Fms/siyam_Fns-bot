@@ -1,28 +1,41 @@
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
-const fs = require('fs');
+const fs = require('fs-extra');
 const path = require('path');
 const express = require('express');
 const chokidar = require('chokidar');
 
-// Express App setup for Render 24/7 keep-alive
+// Load Config File Dynamically
+const configPath = path.join(__dirname, 'config.json');
+let config = fs.existsSync(configPath) ? fs.readJsonSync(configPath) : {};
+
+// Express App setup for 24/7 keep-alive
 const app = express();
-const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('👑 𝐍𝐈𝐉𝐇𝐔𝐌-𝐂𝐇𝐀𝐓-𝐁𝐎𝐓 Is Active 24/7!'));
+const PORT = process.env.PORT || config.dashBoard?.port || 3000;
+app.get('/', (req, res) => res.send(`👑 ${config.botName || 'Bot'} Is Active 24/7!`));
 app.listen(PORT, () => console.log(`[SERVER] Keep-alive server running on port ${PORT}`));
 
 // Bot Initialization
-const token = process.env.BOT_TOKEN;
+const token = process.env.BOT_TOKEN || config.telegramBot?.botToken;
 const bot = new TelegramBot(token, { polling: true });
 
-// Global System Metadata & Dual Prefix Config
-global.botConfig = {
-    botName: "👑 𝐍𝐈𝐉𝐇𝐔𝐌-𝐂𝐇𝐀𝐓-𝐁𝐎𝐓",
-    ownerName: "👑 𝗕𝗢𝗧 𝗢𝗪𝗡𝗘𝗥 ➜ 𝆠፝𝐒𝐈𝐘𝐀𝐌-𝐇𝐀𝐒𝐀𝐍",
-    adminId: "8442705758", // 👈 আপনার টেলিগ্রাম ইউজার আইডি বসাবেন
-    userPrefix: "/",      // 👈 ডিফল্ট ইউজার প্রিফিক্স
-    adminPrefix: ",",     // 👈 ডিফল্ট এডমিন প্রিফিক্স
-    styleText: (text) => `<b>${text}</b>`
+// Global Helper Text Styler
+global.styleText = (text) => `<b>${text}</b>`;
+
+// Dynamic Config Fetcher Function
+global.getBotConfig = () => {
+    if (fs.existsSync(configPath)) {
+        try { config = fs.readJsonSync(configPath); } catch (e) {}
+    }
+    return {
+        botName: config.botName || "[!]𝐍𝐈𝐉𝐇𝐔𝐌-𝐂𝐇𝐀𝐓-𝐁𝐎𝐓",
+        ownerName: config.security?.ownerName || "𝐒𝐈𝐘𝐀𝐌-𝐇𝐀𝐒𝐀𝐍",
+        ownerUID: String(config.security?.ownerUID || ""),
+        adminBot: (config.adminBot || []).map(id => String(id)),
+        userPrefix: config.prefix?.publicPrefix || "!",
+        adminPrefix: config.prefix?.adminPrefix || ".",
+        allowAdminUsePublicPrefix: config.prefix?.allowAdminUsePublicPrefix ?? true
+    };
 };
 
 // Collections
@@ -41,9 +54,10 @@ function loadCommands() {
         delete require.cache[require.resolve(path.join(commandPath, file))];
         try {
             const cmd = require(path.join(commandPath, file));
-            if (cmd.name) {
-                bot.commands.set(cmd.name, cmd);
-                console.log(`[COMMAND LOADED] ➜ ${cmd.name}`);
+            const cmdName = cmd.config?.name || cmd.name;
+            if (cmdName) {
+                bot.commands.set(cmdName, cmd);
+                console.log(`[COMMAND LOADED] ➜ ${cmdName}`);
             }
         } catch (err) {
             console.error(`[COMMAND ERROR] Failed to load ${file}:`, err.message);
@@ -75,7 +89,7 @@ function loadEvents() {
 loadCommands();
 loadEvents();
 
-// Auto-Watch for File Changes (Auto Hot-Reload)
+// Auto-Watch for File Changes
 chokidar.watch([path.join(__dirname, 'command'), path.join(__dirname, 'event')]).on('change', (filePath) => {
     console.log(`[FILE CHANGED] Reloading modules: ${filePath}`);
     loadCommands();
@@ -86,27 +100,52 @@ chokidar.watch([path.join(__dirname, 'command'), path.join(__dirname, 'event')])
 bot.on('message', async (msg) => {
     if (!msg.text) return;
 
+    const botConf = global.getBotConfig();
     const text = msg.text.trim();
     const chatId = msg.chat.id;
-    const userId = msg.from.id.toString();
+    const userId = String(msg.from.id);
 
-    // ১. ইউজার বা এডমিন শুধু "prefix" লিখলে কার কী প্রিফিক্স তা দেখাবে
+    // ১. "prefix" দিলে কনফিগ ফাইল থেকে সরাসরি দেখাবে
     if (text.toLowerCase() === "prefix") {
-        const prefixInfoMsg = `${global.botConfig.styleText('⚙️ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐏𝐑𝐄𝐅𝐈𝐗 𝐈𝐍𝐅𝐎')}\n\n` +
-            `${global.botConfig.styleText(`👤 𝐔𝐒𝐄𝐑 𝐏𝐑𝐄𝐅𝐈𝐗 : [ ${global.botConfig.userPrefix} ]`)}\n` +
-            `${global.botConfig.styleText(`👑 𝐀𝐃𝐌𝐈𝐍 𝐏𝐑𝐄𝐅𝐈𝐗 : [ ${global.botConfig.adminPrefix} ]`)}\n\n` +
-            `${global.botConfig.styleText(global.botConfig.botName)}\n` +
-            `${global.botConfig.styleText(global.botConfig.ownerName)}`;
+        const prefixInfoMsg = `${global.styleText('⚙️ 𝐒𝐘𝐒𝐓𝐄𝐌 𝐏𝐑𝐄𝐅𝐈𝐗 𝐈𝐍𝐅𝐎')}\n\n` +
+            `${global.styleText(`👤 𝐔𝐒𝐄𝐑 𝐏𝐑𝐄𝐅𝐈𝐗 : [ ${botConf.userPrefix} ]`)}\n` +
+            `${global.styleText(`👑 𝐀𝐃𝐌𝐈𝐍 𝐏𝐑𝐄𝐅𝐈𝐗 : [ ${botConf.adminPrefix} ]`)}\n\n` +
+            `${global.styleText(`👑 ${botConf.botName}`)}\n` +
+            `${global.styleText(`👑 𝗕𝗢𝗧 𝗢𝗪𝗡𝗘𝗥 ➜ ${botConf.ownerName}`)}`;
 
         return bot.sendMessage(chatId, prefixInfoMsg, { parse_mode: 'HTML' });
     }
 
-    // এডমিন ও ইউজার প্রিফিক্স নির্বাচন
-    const isAdmin = userId === global.botConfig.adminId;
-    const activePrefix = isAdmin ? global.botConfig.adminPrefix : global.botConfig.userPrefix;
+    // এডমিন ও অনার রোলের তথ্য কনফিগ থেকে চেক
+    const isAdmin = botConf.adminBot.includes(userId) || userId === botConf.ownerUID;
+    
+    // প্রিফিক্স ডিটেকশন (এডমিন হলে দুটোই কাজ করবে, ইউজার হলে শুধু পাবলিক প্রিফিক্স)
+    let activePrefix = null;
 
-    // ২. নির্দিষ্ট প্রিফিক্স ছাড়া মেসেজ আসলে ইভেন্টে পাঠানো হবে
-    if (!text.startsWith(activePrefix)) {
+    if (isAdmin) {
+        if (text.startsWith(botConf.adminPrefix)) {
+            activePrefix = botConf.adminPrefix;
+        } else if (botConf.allowAdminUsePublicPrefix && text.startsWith(botConf.userPrefix)) {
+            activePrefix = botConf.userPrefix;
+        }
+    } else {
+        if (text.startsWith(botConf.userPrefix)) {
+            activePrefix = botConf.userPrefix;
+        }
+    }
+
+    // ২. onChat এবং Non-prefix Events
+    for (const [, cmd] of bot.commands) {
+        if (typeof cmd.onChat === 'function') {
+            try {
+                await cmd.onChat({ bot, msg });
+            } catch (err) {
+                console.error(`[ONCHAT ERROR]:`, err);
+            }
+        }
+    }
+
+    if (!activePrefix) {
         for (const evt of bot.events) {
             try {
                 if (evt.handle) await evt.handle(bot, msg);
@@ -120,10 +159,10 @@ bot.on('message', async (msg) => {
     // ৩. শুধু প্রিফিক্স টাইপ করলে
     const rawInput = text.slice(activePrefix.length).trim();
     if (rawInput === "") {
-        const noCmdMsg = `${global.botConfig.styleText(`⚠️ 𝐍𝐎 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐏𝐑𝐎𝐕𝐈𝐃𝐄𝐃!`)}\n\n` +
-            `${global.botConfig.styleText(`𝐔𝐒𝐄 ${activePrefix}help 𝐓𝐎 𝐒𝐄𝐄 𝐀𝐋𝐋 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒.`)}\n\n` +
-            `${global.botConfig.styleText(global.botConfig.botName)}\n` +
-            `${global.botConfig.styleText(global.botConfig.ownerName)}`;
+        const noCmdMsg = `${global.styleText(`⚠️ 𝐍𝐎 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐏𝐑𝐎𝐕𝐈𝐃𝐄𝐃!`)}\n\n` +
+            `${global.styleText(`𝐔𝐒𝐄 ${activePrefix}help 𝐓𝐎 𝐒𝐄𝐄 𝐀𝐋🇱 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒.`)}\n\n` +
+            `${global.styleText(`👑 ${botConf.botName}`)}\n` +
+            `${global.styleText(`👑 𝗕𝗢𝗧 𝗢𝗪𝗡𝗘𝗥 ➜ ${botConf.ownerName}`)}`;
 
         return bot.sendMessage(chatId, noCmdMsg, { parse_mode: 'HTML' });
     }
@@ -131,32 +170,42 @@ bot.on('message', async (msg) => {
     // ৪. কমান্ড প্রসেস করা
     const args = rawInput.split(/ +/);
     const commandName = args.shift().toLowerCase();
-    const cmd = bot.commands.get(commandName);
+    
+    let cmd = bot.commands.get(commandName);
+    if (!cmd) {
+        for (const [, command] of bot.commands) {
+            const aliases = command.config?.aliases || command.aliases;
+            if (aliases && Array.isArray(aliases) && aliases.includes(commandName)) {
+                cmd = command;
+                break;
+            }
+        }
+    }
 
     if (cmd) {
         try {
-            await cmd.execute(bot, msg, args);
+            if (typeof cmd.onStart === 'function') {
+                await cmd.onStart({ bot, msg, args });
+            } else if (typeof cmd.execute === 'function') {
+                await cmd.execute(bot, msg, args);
+            }
         } catch (error) {
             console.error(`[EXECUTION ERROR] Command ${activePrefix}${commandName}:`, error);
-            bot.sendMessage(chatId, global.botConfig.styleText(`⚠️ 𝐀𝐧 𝐞𝐫𝐫𝐨𝐫 𝐨𝐜𝐜𝐮𝐫𝐫𝐞𝐝 𝐰𝐡𝐢𝐥𝐞 𝐞𝐱𝐞𝐜𝐮𝐭𝐢𝐧𝐠 𝐭𝐡𝐢𝐬 𝐜𝐨𝐦𝐦𝐚𝐧𝐝!`), { parse_mode: 'HTML' });
+            bot.sendMessage(chatId, global.styleText(`⚠️ 𝐀𝐧 𝐞𝐫𝐫𝐨𝐫 𝐨𝐜𝐜𝐮𝐫𝐫𝐞𝐝 𝐰𝐡𝐢𝐥𝐞 𝐞𝐱𝐞𝐜𝐮𝐭𝐢𝐧𝐠 𝐭𝐡𝐢𝐬 𝐜𝐨𝐦𝐦𝐚𝐧𝐝!`), { parse_mode: 'HTML' });
         }
     } else {
-        // ৫. ভুল বা না থাকা কমান্ড দিলে
-        const notFoundMsg = `${global.botConfig.styleText(`❌ 𝐍𝐎𝐓 𝐀 𝐕𝐀𝐋𝐈𝐃 𝐂𝐎𝐌𝐌𝐀𝐍𝐃!`)}\n\n` +
-            `${global.botConfig.styleText(`𝐔𝐒𝐄 ${activePrefix}help 𝐓𝐎 𝐒𝐄𝐄 𝐀𝐋𝐋 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒.`)}\n\n` +
-            `${global.botConfig.styleText(global.botConfig.botName)}\n` +
-            `${global.botConfig.styleText(global.botConfig.ownerName)}`;
+        // ৫. ভুল কমান্ড
+        const notFoundMsg = `${global.styleText(`❌ 𝐍𝐎𝐓 𝐀 𝐕𝐀🇱𝐈𝐃 𝐂𝐎𝐌𝐌𝐀𝐍𝐃!`)}\n\n` +
+            `${global.styleText(`𝐔𝐒𝐄 ${activePrefix}help 𝐓𝐎 𝐒𝐄𝐄 𝐀𝐋🇱 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒.`)}\n\n` +
+            `${global.styleText(`👑 ${botConf.botName}`)}\n` +
+            `${global.styleText(`👑 𝗕𝗢𝗧 𝗢𝗪𝗡𝗘𝗥 ➜ ${botConf.ownerName}`)}`;
 
         bot.sendMessage(chatId, notFoundMsg, { parse_mode: 'HTML' });
     }
 });
 
-// Global Anti-Crash Protection
-process.on('unhandledRejection', (reason, promise) => {
-    console.error(' [ANTI-CRASH] Unhandled Rejection:', reason);
-});
-process.on('uncaughtException', (err, origin) => {
-    console.error(' [ANTI-CRASH] Uncaught Exception:', err);
-});
+// Anti-Crash Protection
+process.on('unhandledRejection', (reason) => console.error(' [ANTI-CRASH] Unhandled Rejection:', reason));
+process.on('uncaughtException', (err) => console.error(' [ANTI-CRASH] Uncaught Exception:', err));
 
 console.log("🚀 Bot Core System Successfully Online!");
